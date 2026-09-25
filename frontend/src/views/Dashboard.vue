@@ -3,9 +3,16 @@
     <header class="page-head">
       <div>
         <h2>运营概览</h2>
-        <p class="page-desc">汇总各业务模块的关键指标，先看总量再看异常。</p>
+        <p class="page-desc">汇总各业务模块的关键指标，先看总量再看异常；数据与各业务列表同源。</p>
       </div>
+      <button class="btn" type="button" :disabled="loading" @click="loadOverview">
+        {{ loading ? '刷新中…' : '刷新概览' }}
+      </button>
     </header>
+    <p v-if="errorMessage" class="error-text">
+      {{ errorMessage }}
+      <button class="link" type="button" @click="loadOverview">重试</button>
+    </p>
     <div class="stat-row">
       <article v-for="card in cards" :key="card.label" class="stat-card">
         <span class="stat-label">{{ card.label }}</span>
@@ -23,6 +30,9 @@
           <td>{{ row.pending }}</td>
           <td>{{ row.abnormal }}</td>
         </tr>
+        <tr v-if="!loading && !errorMessage && !moduleRows.length">
+          <td colspan="4" class="empty-state">暂无运营数据</td>
+        </tr>
       </tbody>
     </table>
   </section>
@@ -31,7 +41,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 
-import { fetchJson } from '@/api/client'
+import { request } from '@/api/client'
 
 type Overview = {
   cards: { label: string; value: number }[]
@@ -40,15 +50,29 @@ type Overview = {
 
 const cards = ref<Overview['cards']>([])
 const moduleRows = ref<Overview['modules']>([])
+const loading = ref(false)
+const errorMessage = ref('')
 
-onMounted(async () => {
+async function loadOverview() {
+  loading.value = true
+  errorMessage.value = ''
   try {
-    const payload = await fetchJson<Overview>('/api/overview')
-    cards.value = payload.cards
-    moduleRows.value = payload.modules
-  } catch {
-    cards.value = [{"label": "业务模块", "value": 0}, {"label": "今日新增", "value": 0}]
-    moduleRows.value = [{"name": "厂区单元", "created": 0, "pending": 0, "abnormal": 0}, {"name": "进水监测", "created": 0, "pending": 0, "abnormal": 0}, {"name": "出水监测", "created": 0, "pending": 0, "abnormal": 0}, {"name": "曝气控制", "created": 0, "pending": 0, "abnormal": 0}, {"name": "加药管理", "created": 0, "pending": 0, "abnormal": 0}, {"name": "污泥处置", "created": 0, "pending": 0, "abnormal": 0}, {"name": "脱水运行", "created": 0, "pending": 0, "abnormal": 0}, {"name": "泵站运行", "created": 0, "pending": 0, "abnormal": 0}, {"name": "鼓风机组", "created": 0, "pending": 0, "abnormal": 0}, {"name": "膜组件", "created": 0, "pending": 0, "abnormal": 0}, {"name": "在线仪表", "created": 0, "pending": 0, "abnormal": 0}, {"name": "取样检测", "created": 0, "pending": 0, "abnormal": 0}, {"name": "药剂出入", "created": 0, "pending": 0, "abnormal": 0}, {"name": "能耗管理", "created": 0, "pending": 0, "abnormal": 0}, {"name": "报警中心", "created": 0, "pending": 0, "abnormal": 0}, {"name": "设备检修", "created": 0, "pending": 0, "abnormal": 0}, {"name": "受限空间作业", "created": 0, "pending": 0, "abnormal": 0}, {"name": "达标审核", "created": 0, "pending": 0, "abnormal": 0}]
+    const response = await request('/api/overview')
+    if (!response.ok) {
+      throw new Error(`接口返回 ${response.status}，概览数据未更新`)
+    }
+    const payload = (await response.json()) as Overview
+    cards.value = payload.cards ?? []
+    moduleRows.value = payload.modules ?? []
+  } catch (error) {
+    // 失败时明确说明并保留重试入口，不再用一份虚构数据冒充真实概览。
+    cards.value = []
+    moduleRows.value = []
+    errorMessage.value = `${error instanceof Error ? error.message : '运营概览读取失败'}，请稍后重试`
+  } finally {
+    loading.value = false
   }
-})
+}
+
+onMounted(loadOverview)
 </script>
