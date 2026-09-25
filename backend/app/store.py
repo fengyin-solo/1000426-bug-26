@@ -8,12 +8,23 @@ from typing import Any
 
 from app.seed import SEED_ROWS
 
+# 药剂模块的待处理/异常口径与列表、详情保持一致：
+# pending 只由状态推导，作废是正常终态，不算异常，避免概览数字与列表对不上。
+CHEMICAL_PENDING_STATUSES = {"待审核", "已审核"}
+
 
 class Store:
     def __init__(self) -> None:
         self._tables: dict[str, list[dict[str, Any]]] = {
             name: [dict(row) for row in rows] for name, rows in SEED_ROWS.items()
         }
+        self._normalize_chemical_flags()
+
+    def _normalize_chemical_flags(self) -> None:
+        for row in self._tables.get("chemical", []):
+            status = str(row.get("status") or "")
+            row["pending"] = status in CHEMICAL_PENDING_STATUSES
+            row["abnormal"] = False
 
     def module_names(self) -> list[str]:
         return sorted(self._tables)
